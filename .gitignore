@@ -6,3 +6,4 @@ node_modules
 .env
 /pocketbase
 .DS_Store
+pnpm-lock.yaml
