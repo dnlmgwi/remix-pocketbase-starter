@@ -1,23 +1,23 @@
-import * as fs from 'node:fs'
-import * as path from 'node:path'
-import * as url from 'node:url'
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as url from "node:url";
 
-import { createRequestHandler } from '@remix-run/express'
-import { broadcastDevReady, installGlobals } from '@remix-run/node'
-import compression from 'compression'
-import cookieParser from 'cookie-parser'
-import express from 'express'
-import morgan from 'morgan'
-import PocketBase, { BaseAuthStore } from 'pocketbase'
-import sourceMapSupport from 'source-map-support'
-import invariant from 'tiny-invariant'
+import { createRequestHandler } from "@remix-run/express";
+import { broadcastDevReady, installGlobals } from "@remix-run/node";
+import compression from "compression";
+import cookieParser from "cookie-parser";
+import express from "express";
+import morgan from "morgan";
+import PocketBase, { BaseAuthStore } from "pocketbase";
+import sourceMapSupport from "source-map-support";
+import invariant from "tiny-invariant";
 
 class CustomAuthStore extends BaseAuthStore {
   get user() {
-    const model = this.model
+    const model = this.model;
 
     if (!model || !this.isValid) {
-      return null
+      return null;
     }
 
     return {
@@ -25,105 +25,105 @@ class CustomAuthStore extends BaseAuthStore {
       avatar: model?.avatar
         ? `${process.env.POCKETBASE_URL}/api/files/${model.collectionId}/${model.id}/${model.avatar}`
         : undefined,
-    }
+    };
   }
 }
 
 sourceMapSupport.install({
-  retrieveSourceMap: function (source) {
+  retrieveSourceMap: (source) => {
     // get source file without the `file://` prefix or `?t=...` suffix
-    const match = source.match(/^file:\/\/(.*)\?t=[.\d]+$/)
+    const match = source.match(/^file:\/\/(.*)\?t=[.\d]+$/);
     if (match) {
       return {
         url: source,
-        map: fs.readFileSync(`${match[1]}.map`, 'utf8'),
-      }
+        map: fs.readFileSync(`${match[1]}.map`, "utf8"),
+      };
     }
-    return null
+    return null;
   },
-})
-installGlobals()
+});
+installGlobals();
 
 /** @typedef {import('@remix-run/node').ServerBuild} ServerBuild */
 
-const BUILD_PATH = path.resolve('build/index.js')
-const VERSION_PATH = path.resolve('build/version.txt')
+const BUILD_PATH = path.resolve("build/index.js");
+const VERSION_PATH = path.resolve("build/version.txt");
 
-const initialBuild = await reimportServer()
+const initialBuild = await reimportServer();
 
 async function getLoadContext(req) {
-  invariant(process.env.POCKETBASE_URL, 'POCKETBASE_URL is not set')
+  invariant(process.env.POCKETBASE_URL, "POCKETBASE_URL is not set");
 
-  const pb = new PocketBase(process.env.POCKETBASE_URL, new CustomAuthStore())
+  const pb = new PocketBase(process.env.POCKETBASE_URL, new CustomAuthStore());
 
-  const parsedCookie = JSON.parse(req.cookies['pb_auth'] || '{}')
-  pb.authStore.save(parsedCookie.token || '', parsedCookie.model || null)
+  const parsedCookie = JSON.parse(req.cookies.pb_auth || "{}");
+  pb.authStore.save(parsedCookie.token || "", parsedCookie.model || null);
 
   try {
-    pb.authStore.isValid && (await pb.collection('users').authRefresh())
+    pb.authStore.isValid && (await pb.collection("users").authRefresh());
   } catch (_) {
-    pb.authStore.clear()
+    pb.authStore.clear();
   }
 
   return {
     pb,
     user: pb.authStore.user,
-  }
+  };
 }
 
 const remixHandler =
-  process.env.NODE_ENV === 'development'
+  process.env.NODE_ENV === "development"
     ? await createDevRequestHandler(initialBuild)
     : createRequestHandler({
-        build: initialBuild,
-        getLoadContext,
-        mode: initialBuild.mode,
-      })
+      build: initialBuild,
+      getLoadContext,
+      mode: initialBuild.mode,
+    });
 
-const app = express()
+const app = express();
 
-app.use(compression())
-app.use(cookieParser())
+app.use(compression());
+app.use(cookieParser());
 
 // http://expressjs.com/en/advanced/best-practice-security.html#at-a-minimum-disable-x-powered-by-header
-app.disable('x-powered-by')
+app.disable("x-powered-by");
 
 // Remix fingerprints its assets so we can cache forever.
 app.use(
-  '/build',
-  express.static('public/build', { immutable: true, maxAge: '1y' }),
-)
+  "/build",
+  express.static("public/build", { immutable: true, maxAge: "1y" }),
+);
 
 // Everything else (like favicon.ico) is cached for an hour. You may want to be
 // more aggressive with this caching.
-app.use(express.static('public', { maxAge: '1h' }))
+app.use(express.static("public", { maxAge: "1h" }));
 
-app.use(morgan('tiny'))
+app.use(morgan("tiny"));
 
-app.all('*', remixHandler)
+app.all("*", remixHandler);
 
-const host = process.env.APP_HOST || 'localhost'
-const port = process.env.APP_PORT || 3000
+const host = process.env.APP_HOST || "localhost";
+const port = process.env.APP_PORT || 3000;
 
 app.listen(port, host, async () => {
-  console.log(`Express server listening on  ${host}:${port}`)
+  console.log(`Express server listening on  ${host}:${port}`);
 
-  if (process.env.NODE_ENV === 'development') {
-    broadcastDevReady(initialBuild)
+  if (process.env.NODE_ENV === "development") {
+    broadcastDevReady(initialBuild);
   }
-})
+});
 
 /**
  * @returns {Promise<ServerBuild>}
  */
 async function reimportServer() {
-  const stat = fs.statSync(BUILD_PATH)
+  const stat = fs.statSync(BUILD_PATH);
 
   // convert build path to URL for Windows compatibility with dynamic `import`
-  const BUILD_URL = url.pathToFileURL(BUILD_PATH).href
+  const BUILD_URL = url.pathToFileURL(BUILD_PATH).href;
 
   // use a timestamp query parameter to bust the import cache
-  return import(BUILD_URL + '?t=' + stat.mtimeMs)
+  return import(BUILD_URL + "?t=" + stat.mtimeMs);
 }
 
 /**
@@ -131,18 +131,18 @@ async function reimportServer() {
  * @returns {Promise<import('@remix-run/express').RequestHandler>}
  */
 async function createDevRequestHandler(initialBuild) {
-  let build = initialBuild
+  let build = initialBuild;
   async function handleServerUpdate() {
     // 1. re-import the server build
-    build = await reimportServer()
+    build = await reimportServer();
     // 2. tell Remix that this app server is now up-to-date and ready
-    broadcastDevReady(build)
+    broadcastDevReady(build);
   }
-  const chokidar = await import('chokidar')
+  const chokidar = await import("chokidar");
   chokidar
     .watch(VERSION_PATH, { ignoreInitial: true })
-    .on('add', handleServerUpdate)
-    .on('change', handleServerUpdate)
+    .on("add", handleServerUpdate)
+    .on("change", handleServerUpdate);
 
   // wrap request handler to make sure its recreated with the latest build for every request
   return async (req, res, next) => {
@@ -150,10 +150,10 @@ async function createDevRequestHandler(initialBuild) {
       return createRequestHandler({
         build,
         getLoadContext,
-        mode: 'development',
-      })(req, res, next)
+        mode: "development",
+      })(req, res, next);
     } catch (error) {
-      next(error)
+      next(error);
     }
-  }
+  };
 }
